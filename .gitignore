@@ -1,0 +1,5 @@
+/target
+*.elf
+*.bin
+.axconfig.old.toml
+.axconfig.toml

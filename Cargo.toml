@@ -1,0 +1,55 @@
+[workspace]
+
+exclude = ["arceos"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["muou000 <muou000@outlook.com>"]
+license = "Apache-2.0"
+homepage = "https://github.com/muou000/MyOS"
+repository = "https://github.com/muou000/MyOS"
+
+[workspace.dependencies]
+axconfig = { path = "arceos/modules/axconfig" }
+axhal = { path = "arceos/modules/axhal" }
+axlog = { path = "arceos/modules/axlog" }
+axruntime = { path = "arceos/modules/axruntime" }
+
+axstd = { path = "arceos/ulib/axstd" }
+
+axplat-riscv64-qemu-virt = "0.3.0"
+axplat-loongarch64-qemu-virt = "0.3.0"
+
+[package]
+name = "My"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+
+# Map axstd features passed by the build system to dependency features so
+# building the workspace root (`APP` pointing to project root) works.
+# Feature names can't contain '/', so define dash-separated feature names that
+# the makefile will pass (it converts '/' -> '-'). These forward to the
+# dependency features using "dep/feature" syntax.
+axstd-defplat = ["axstd/defplat"]
+axstd-log-level-info = ["axstd/log-level-info"]
+
+[dependencies]
+axhal.workspace = true
+axlog.workspace = true
+axconfig.workspace = true
+axruntime.workspace = true
+axstd.workspace = true
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+axplat-riscv64-qemu-virt.workspace = true
+
+[target.'cfg(target_arch = "loongarch64")'.dependencies]
+axplat-loongarch64-qemu-virt.workspace = true
