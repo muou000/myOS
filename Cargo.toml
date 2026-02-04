@@ -11,15 +11,17 @@ homepage = "https://github.com/muou000/MyOS"
 repository = "https://github.com/muou000/MyOS"
 
 [workspace.dependencies]
+axfeat = { path = "arceos/api/axfeat" }
+
 axconfig = { path = "arceos/modules/axconfig" }
 axhal = { path = "arceos/modules/axhal" }
 axlog = { path = "arceos/modules/axlog" }
 axruntime = { path = "arceos/modules/axruntime" }
 
-axstd = { path = "arceos/ulib/axstd" }
-
 axplat-riscv64-qemu-virt = "0.3.0"
 axplat-loongarch64-qemu-virt = "0.3.0"
+
+syscalls = { git = "https://github.com/muou000/syscalls.git", rev = "efac241", default-features = false }
 
 [package]
 name = "My"
@@ -32,21 +34,15 @@ repository.workspace = true
 
 [features]
 default = []
-
-# Map axstd features passed by the build system to dependency features so
-# building the workspace root (`APP` pointing to project root) works.
-# Feature names can't contain '/', so define dash-separated feature names that
-# the makefile will pass (it converts '/' -> '-'). These forward to the
-# dependency features using "dep/feature" syntax.
-axstd-defplat = ["axstd/defplat"]
-axstd-log-level-info = ["axstd/log-level-info"]
+qemu = []
 
 [dependencies]
 axhal.workspace = true
 axlog.workspace = true
 axconfig.workspace = true
 axruntime.workspace = true
-axstd.workspace = true
+axfeat.workspace = true
+syscalls.workspace = true
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 axplat-riscv64-qemu-virt.workspace = true
