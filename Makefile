@@ -2,6 +2,7 @@ export A := $(PWD)
 export NO_AXSTD := y
 export AX_LIB := axfeat
 export APP_FEATURES := qemu
+export BLK := y
 
 export ARCH := riscv64
 export LOG := info
@@ -11,3 +12,7 @@ build run justrun: defconfig
 
 clean defconfig:
 	@make -C arceos $@
+
+img:
+	./build_img.sh all
+	mv rootfs-$(ARCH).img arceos/disk.img
