@@ -1,6 +1,7 @@
 [workspace]
 
 exclude = ["arceos"]
+members = ["mycore", "mysyscalls"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,12 +12,21 @@ homepage = "https://github.com/muou000/MyOS"
 repository = "https://github.com/muou000/MyOS"
 
 [workspace.dependencies]
-axfeat = { path = "arceos/api/axfeat" }
+axfeat = { path = "arceos/api/axfeat", features = [
+    "alloc-slab",
+    "multitask",
+    "sched-rr",
+    "fs",
+    "paging"
+    ] }
 
 axconfig = { path = "arceos/modules/axconfig" }
-axhal = { path = "arceos/modules/axhal" }
+axhal = { path = "arceos/modules/axhal", features = ["uspace", "fp-simd"] }
 axlog = { path = "arceos/modules/axlog" }
 axruntime = { path = "arceos/modules/axruntime" }
+
+axtask = { path = "arceos/modules/axtask" }
+axerrno = "0.2"
 
 axplat-riscv64-qemu-virt = "0.3.0"
 axplat-loongarch64-qemu-virt = "0.3.0"
@@ -43,6 +53,8 @@ axconfig.workspace = true
 axruntime.workspace = true
 axfeat.workspace = true
 syscalls.workspace = true
+mysyscalls = { path = "mysyscalls" }
+mycore = { path = "mycore", features = ["alloc", "fs"] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 axplat-riscv64-qemu-virt.workspace = true
