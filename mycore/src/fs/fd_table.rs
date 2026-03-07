@@ -4,7 +4,9 @@ use axfs::api::File;
 use spin::Mutex;
 
 pub enum FileDesc {
-    Stdio,
+    Stdin,
+    Stdout,
+    Stderr,
     File(Arc<Mutex<File>>),
 }
 
@@ -15,9 +17,9 @@ pub struct FdTable {
 impl FdTable {
     pub fn new() -> Self {
         let mut fds = Vec::new();
-        fds.push(Some(FileDesc::Stdio)); // fd 0: stdin
-        fds.push(Some(FileDesc::Stdio)); // fd 1: stdout
-        fds.push(Some(FileDesc::Stdio)); // fd 2: stderr
+        fds.push(Some(FileDesc::Stdin)); // fd 0: stdin
+        fds.push(Some(FileDesc::Stdout)); // fd 1: stdout
+        fds.push(Some(FileDesc::Stderr)); // fd 2: stderr
 
         Self { fds }
     }

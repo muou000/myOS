@@ -42,30 +42,12 @@ fn read_user_string(addr: usize) -> Option<String> {
 pub fn sys_read(fd: usize, buf: usize, count: usize) -> isize {
     axlog::debug!("sys_read: fd={}, buf={:#x}, count={}", fd, buf, count);
 
-    if buf == 0 || count == 0 {
+    if count == 0 {
         return 0;
     }
 
-    if fd == 0 {
-        let slice = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, count) };
-        let mut i = 0;
-        while i < count {
-            let mut c = [0u8; 1];
-            let n = axhal::console::read_bytes(&mut c);
-            if n == 0 {
-                if i > 0 {
-                    break;
-                }
-                axtask::yield_now();
-                continue;
-            }
-            slice[i] = c[0];
-            i += 1;
-            if c[0] == b'\n' || c[0] == b'\r' {
-                break;
-            }
-        }
-        return i as isize;
+    if buf == 0 {
+        return -LinuxError::EFAULT.code() as isize;
     }
 
     let proc = match mycore::task::current_process() {
@@ -76,21 +58,54 @@ pub fn sys_read(fd: usize, buf: usize, count: usize) -> isize {
         }
     };
 
-    let fd_table = proc.fd_table.lock();
-    let file_desc = match fd_table.get(fd) {
-        Some(desc) => desc,
-        None => {
-            axlog::error!("sys_read: invalid fd {}", fd);
-            return -LinuxError::EBADF.code() as isize;
+    enum ReadTarget {
+        Stdin,
+        File(Arc<Mutex<File>>),
+    }
+
+    let read_target = {
+        let fd_table = proc.fd_table.lock();
+        let file_desc = match fd_table.get(fd) {
+            Some(desc) => desc,
+            None => {
+                axlog::error!("sys_read: invalid fd {}", fd);
+                return -LinuxError::EBADF.code() as isize;
+            }
+        };
+
+        match file_desc {
+            FileDesc::Stdin => ReadTarget::Stdin,
+            FileDesc::Stdout | FileDesc::Stderr => {
+                axlog::error!("sys_read: trying to read from non-readable stdio fd {}", fd);
+                return -LinuxError::EBADF.code() as isize;
+            }
+            FileDesc::File(file) => ReadTarget::File(Arc::clone(file)),
         }
     };
 
-    match file_desc {
-        FileDesc::Stdio => {
-            axlog::error!("sys_read: trying to read from stdout/stderr");
-            -LinuxError::EBADF.code() as isize
+    match read_target {
+        ReadTarget::Stdin => {
+            let slice = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, count) };
+            let mut i = 0;
+            while i < count {
+                let mut c = [0u8; 1];
+                let n = axhal::console::read_bytes(&mut c);
+                if n == 0 {
+                    if i > 0 {
+                        break;
+                    }
+                    axtask::yield_now();
+                    continue;
+                }
+                slice[i] = c[0];
+                i += 1;
+                if c[0] == b'\n' || c[0] == b'\r' {
+                    break;
+                }
+            }
+            i as isize
         }
-        FileDesc::File(file) => {
+        ReadTarget::File(file) => {
             let slice = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, count) };
             let mut file = file.lock();
 
@@ -111,22 +126,12 @@ pub fn sys_read(fd: usize, buf: usize, count: usize) -> isize {
 pub fn sys_write(fd: usize, buf: usize, count: usize) -> isize {
     axlog::debug!("sys_write: fd={}, buf={:#x}, count={}", fd, buf, count);
 
-    if fd == 1 || fd == 2 {
-        if buf == 0 || count == 0 {
-            return 0;
-        }
+    if count == 0 {
+        return 0;
+    }
 
-        let slice = unsafe { core::slice::from_raw_parts(buf as *const u8, count) };
-
-        if let Ok(s) = core::str::from_utf8(slice) {
-            axlog::ax_print!("{}", s);
-        } else {
-            for &byte in slice {
-                axlog::ax_print!("{}", byte as char);
-            }
-        }
-
-        return count as isize;
+    if buf == 0 {
+        return -LinuxError::EFAULT.code() as isize;
     }
 
     let proc = match mycore::task::current_process() {
@@ -134,15 +139,40 @@ pub fn sys_write(fd: usize, buf: usize, count: usize) -> isize {
         None => return -LinuxError::ESRCH.code() as isize,
     };
 
-    let fd_table = proc.fd_table.lock();
-    let file_desc = match fd_table.get(fd) {
-        Some(desc) => desc,
-        None => return -LinuxError::EBADF.code() as isize,
+    enum WriteTarget {
+        Stdout,
+        Stderr,
+        File(Arc<Mutex<File>>),
+    }
+
+    let write_target = {
+        let fd_table = proc.fd_table.lock();
+        let file_desc = match fd_table.get(fd) {
+            Some(desc) => desc,
+            None => return -LinuxError::EBADF.code() as isize,
+        };
+
+        match file_desc {
+            FileDesc::Stdin => return -LinuxError::EBADF.code() as isize,
+            FileDesc::Stdout => WriteTarget::Stdout,
+            FileDesc::Stderr => WriteTarget::Stderr,
+            FileDesc::File(file) => WriteTarget::File(Arc::clone(file)),
+        }
     };
 
-    match file_desc {
-        FileDesc::Stdio => -LinuxError::EBADF.code() as isize,
-        FileDesc::File(file) => {
+    match write_target {
+        WriteTarget::Stdout | WriteTarget::Stderr => {
+            let slice = unsafe { core::slice::from_raw_parts(buf as *const u8, count) };
+            if let Ok(s) = core::str::from_utf8(slice) {
+                axlog::ax_print!("{}", s);
+            } else {
+                for &byte in slice {
+                    axlog::ax_print!("{}", byte as char);
+                }
+            }
+            count as isize
+        }
+        WriteTarget::File(file) => {
             let slice = unsafe { core::slice::from_raw_parts(buf as *const u8, count) };
             let mut file = file.lock();
 
@@ -266,12 +296,15 @@ pub fn sys_fstat(fd: usize, statbuf: usize) -> isize {
     };
 
     match file_desc {
-        FileDesc::Stdio => {
-            // TODO
+        FileDesc::Stdin | FileDesc::Stdout | FileDesc::Stderr => {
             let stat = unsafe { &mut *(statbuf as *mut Stat) };
             *stat = Stat::default();
             stat.st_mode = 0o020000 | 0o666;
-            stat.st_rdev = if fd == 0 { 0x8800 } else { 0x8801 };
+            stat.st_rdev = match file_desc {
+                FileDesc::Stdin => 0x8800,
+                FileDesc::Stdout | FileDesc::Stderr => 0x8801,
+                FileDesc::File(_) => 0,
+            };
             0
         }
         FileDesc::File(file) => {
